@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { MilestoneCard } from "@/components/MilestoneCard";
-import { ArrowLeft, Plus, CheckCircle2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Plus, CheckCircle2, ExternalLink, Wallet } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { AddMilestoneDialog } from "@/components/dialogs/AddMilestoneDialog";
+import { DepositDialog } from "@/components/dialogs/DepositDialog";
 
 // Mock data
 const mockProject = {
@@ -64,9 +67,31 @@ const mockProject = {
 
 const ProjectDetail = () => {
   const navigate = useNavigate();
-  const totalAmount = mockProject.milestones.reduce((sum, m) => sum + m.amount, 0);
-  const completedMilestones = mockProject.milestones.filter(m => m.status === "COMPLETED").length;
-  const progress = (completedMilestones / mockProject.milestones.length) * 100;
+  const [project, setProject] = useState(mockProject);
+  const [addMilestoneOpen, setAddMilestoneOpen] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [isAdmin] = useState(true); // Mock admin status
+
+  const totalAmount = project.milestones.reduce((sum, m) => sum + m.amount, 0);
+  const completedMilestones = project.milestones.filter(m => m.status === "COMPLETED").length;
+  const progress = (completedMilestones / project.milestones.length) * 100;
+
+  const handleAddMilestone = (newMilestone: any) => {
+    setProject({
+      ...project,
+      milestones: [...project.milestones, { ...newMilestone, index: project.milestones.length }]
+    });
+  };
+
+  const handleUpdateMilestone = (index: number, updatedMilestone: any) => {
+    const newMilestones = [...project.milestones];
+    newMilestones[index] = updatedMilestone;
+    setProject({ ...project, milestones: newMilestones });
+  };
+
+  const handleDeposit = (amount: number) => {
+    console.log("Deposited:", amount);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
@@ -80,10 +105,18 @@ const ProjectDetail = () => {
             </Button>
             
             <div className="flex items-center gap-3">
-              <Button variant="outline" className="gap-2">
-                <Plus className="h-4 w-4" />
-                Add Milestone
-              </Button>
+              {isAdmin && (
+                <>
+                  <Button variant="outline" className="gap-2" onClick={() => setDepositOpen(true)}>
+                    <Wallet className="h-4 w-4" />
+                    Deposit Funds
+                  </Button>
+                  <Button variant="default" className="gap-2" onClick={() => setAddMilestoneOpen(true)}>
+                    <Plus className="h-4 w-4" />
+                    Add Milestone
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -96,9 +129,9 @@ const ProjectDetail = () => {
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-4">
-                <h1 className="text-3xl font-bold text-foreground">{mockProject.title}</h1>
-                <Badge variant={mockProject.completed ? "default" : "secondary"}>
-                  {mockProject.completed ? (
+                <h1 className="text-3xl font-bold text-foreground">{project.title}</h1>
+                <Badge variant={project.completed ? "default" : "secondary"}>
+                  {project.completed ? (
                     <span className="flex items-center gap-1">
                       <CheckCircle2 className="h-3 w-3" />
                       Completed
@@ -108,12 +141,12 @@ const ProjectDetail = () => {
                   )}
                 </Badge>
               </div>
-              <p className="text-muted-foreground mb-6">{mockProject.description}</p>
+              <p className="text-muted-foreground mb-6">{project.description}</p>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Token</p>
-                  <Badge variant="outline" className="font-mono">{mockProject.token}</Badge>
+                  <Badge variant="outline" className="font-mono">{project.token}</Badge>
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Total Value</p>
@@ -122,7 +155,7 @@ const ProjectDetail = () => {
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Vault Address</p>
                   <div className="flex items-center gap-1">
-                    <p className="text-sm font-mono text-foreground">{mockProject.vaultAddress.slice(0, 10)}...</p>
+                    <p className="text-sm font-mono text-foreground">{project.vaultAddress.slice(0, 10)}...</p>
                     <ExternalLink className="h-3 w-3 text-muted-foreground" />
                   </div>
                 </div>
@@ -137,7 +170,7 @@ const ProjectDetail = () => {
                   <span className="text-sm font-medium">{Math.round(progress)}%</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {completedMilestones} of {mockProject.milestones.length} milestones completed
+                  {completedMilestones} of {project.milestones.length} milestones completed
                 </p>
               </Card>
             </div>
@@ -153,11 +186,13 @@ const ProjectDetail = () => {
           </TabsList>
 
           <TabsContent value="milestones" className="space-y-6">
-            {mockProject.milestones.map((milestone) => (
+            {project.milestones.map((milestone, index) => (
               <MilestoneCard
                 key={milestone.index}
                 milestone={milestone}
-                projectToken={mockProject.token}
+                projectToken={project.token}
+                onUpdate={(updated) => handleUpdateMilestone(index, updated)}
+                isAdmin={isAdmin}
               />
             ))}
           </TabsContent>
@@ -169,29 +204,29 @@ const ProjectDetail = () => {
                 <div className="space-y-3">
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Project ID</p>
-                    <p className="font-mono text-sm">{mockProject.id}</p>
+                    <p className="font-mono text-sm">{project.id}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Initializer</p>
-                    <p className="font-mono text-sm">{mockProject.initializer}</p>
+                    <p className="font-mono text-sm">{project.initializer}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Payee</p>
-                    <p className="font-mono text-sm">{mockProject.payee}</p>
+                    <p className="font-mono text-sm">{project.payee}</p>
                   </div>
                 </div>
                 <div className="space-y-3">
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Vault Address</p>
-                    <p className="font-mono text-sm">{mockProject.vaultAddress}</p>
+                    <p className="font-mono text-sm">{project.vaultAddress}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Payment Token</p>
-                    <p className="font-mono text-sm">{mockProject.token}</p>
+                    <p className="font-mono text-sm">{project.token}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Status</p>
-                    <p className="text-sm">{mockProject.completed ? "Completed" : "In Progress"}</p>
+                    <p className="text-sm">{project.completed ? "Completed" : "In Progress"}</p>
                   </div>
                 </div>
               </div>
@@ -206,6 +241,20 @@ const ProjectDetail = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Dialogs */}
+      <AddMilestoneDialog
+        open={addMilestoneOpen}
+        onOpenChange={setAddMilestoneOpen}
+        onAdd={handleAddMilestone}
+      />
+      <DepositDialog
+        open={depositOpen}
+        onOpenChange={setDepositOpen}
+        projectId={project.id}
+        token={project.token}
+        onDeposit={handleDeposit}
+      />
     </div>
   );
 };
