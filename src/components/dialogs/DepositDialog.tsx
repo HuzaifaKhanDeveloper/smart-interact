@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Wallet, AlertCircle } from "lucide-react";
+import { TOKEN_ADDRESSES } from "@/lib/thirdweb";
+import { formatTokenAmount } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface DepositDialogProps {
@@ -12,12 +14,14 @@ interface DepositDialogProps {
   onOpenChange: (open: boolean) => void;
   projectId: number;
   token: string;
-  onDeposit: (amount: number) => void;
+  onDeposit: (amount: number, milestoneIndex: number) => void;
 }
 
 export const DepositDialog = ({ open, onOpenChange, token, onDeposit }: DepositDialogProps) => {
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
+  const [milestoneIndex, setMilestoneIndex] = useState("");
+  const tokenDecimals = 18;
 
   const handleDeposit = () => {
     if (!amount || parseFloat(amount) <= 0) {
@@ -29,13 +33,15 @@ export const DepositDialog = ({ open, onOpenChange, token, onDeposit }: DepositD
       return;
     }
 
-    onDeposit(parseFloat(amount));
+    const indexNum = parseInt(milestoneIndex || "0", 10);
+    onDeposit(parseFloat(amount), isNaN(indexNum) ? 0 : indexNum);
     toast({
       title: "Deposit Successful",
       description: `${amount} ${token} has been deposited to the project vault`,
     });
     onOpenChange(false);
     setAmount("");
+    setMilestoneIndex("");
   };
 
   return (
@@ -70,6 +76,17 @@ export const DepositDialog = ({ open, onOpenChange, token, onDeposit }: DepositD
               className="text-lg"
             />
           </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="milestoneIndex">Milestone Index</Label>
+          <Input
+            id="milestoneIndex"
+            type="number"
+            placeholder="0"
+            value={milestoneIndex}
+            onChange={(e) => setMilestoneIndex(e.target.value)}
+          />
+        </div>
 
           <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-2">
             <div className="flex justify-between text-sm">

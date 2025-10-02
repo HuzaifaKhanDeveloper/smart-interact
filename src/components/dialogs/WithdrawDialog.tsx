@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Wallet, AlertCircle } from "lucide-react";
+import { TOKEN_ADDRESSES } from "@/lib/thirdweb";
+import { formatTokenAmount } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface WithdrawDialogProps {
@@ -17,7 +19,8 @@ interface WithdrawDialogProps {
 
 export const WithdrawDialog = ({ open, onOpenChange, milestone, token, onWithdraw }: WithdrawDialogProps) => {
   const { toast } = useToast();
-  const [amount, setAmount] = useState(milestone?.amount?.toString() || "");
+  const tokenDecimals = 18;
+  const [amount, setAmount] = useState(milestone?.amount ? formatTokenAmount(milestone.amount, tokenDecimals, 6) : "");
 
   const handleWithdraw = () => {
     if (!amount || parseFloat(amount) <= 0) {
@@ -69,7 +72,7 @@ export const WithdrawDialog = ({ open, onOpenChange, milestone, token, onWithdra
               className="text-lg"
             />
             <p className="text-xs text-muted-foreground">
-              Available: {milestone?.amount} {token}
+              Available: {formatTokenAmount(milestone?.amount ?? 0, tokenDecimals, 6)} {token}
             </p>
           </div>
 

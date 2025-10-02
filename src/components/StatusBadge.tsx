@@ -38,10 +38,11 @@ const statusConfig = {
     icon: XCircle,
     className: "bg-destructive/10 text-destructive border-destructive/20",
   },
-};
+} as const;
 
 export const StatusBadge = ({ status, className }: StatusBadgeProps) => {
-  const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.INITIALIZED;
+  const key = (status || "INITIALIZED").toUpperCase() as keyof typeof statusConfig;
+  const config = statusConfig[key] || statusConfig.INITIALIZED;
   const Icon = config.icon;
 
   return (

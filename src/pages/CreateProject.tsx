@@ -7,6 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useActiveAccount, useSendTransaction } from "thirdweb/react";
+import { prepareContractCall } from "thirdweb";
+import { getDealblockContract, TOKEN_ADDRESSES } from "@/lib/thirdweb";
+import { parseUnits } from "viem";
+import { toast } from "sonner";
+import { DEFAULT_TOKEN_DECIMALS, parseAddress, ZERO_ADDRESS } from "@/lib/utils";
 
 interface Task {
   title: string;
@@ -17,6 +23,8 @@ const CreateProject = () => {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([{ title: "", description: "" }]);
   const [approvers, setApprovers] = useState<string[]>([""]);
+  const account = useActiveAccount();
+  const { mutateAsync: sendTx, isPending } = useSendTransaction();
 
   const addTask = () => {
     setTasks([...tasks, { title: "", description: "" }]);
@@ -46,6 +54,93 @@ const CreateProject = () => {
     setApprovers(newApprovers);
   };
 
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const title = String(formData.get("title") || "").trim();
+    const description = String(formData.get("description") || "").trim();
+    const payeeInput = String(formData.get("payee") || "").trim();
+    const tokenSymbol = String(formData.get("token") || "").trim();
+    const amountStr = String(formData.get("amount") || "0").trim();
+    const deadlineStr = String(formData.get("deadline") || "").trim();
+
+    if (!account) {
+      toast.error("Please connect your wallet");
+      return;
+    }
+    if (!title || !description || !payeeInput || !tokenSymbol || !deadlineStr) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+    const token = TOKEN_ADDRESSES[tokenSymbol as keyof typeof TOKEN_ADDRESSES];
+    if (!token) {
+      toast.error("Invalid token selected");
+      return;
+    }
+
+    let amount: bigint;
+    try {
+      amount = parseUnits(amountStr || "0", DEFAULT_TOKEN_DECIMALS);
+      if (amount <= 0n) throw new Error("amount");
+    } catch {
+      toast.error("Enter a valid milestone amount");
+      return;
+    }
+    const deadline = BigInt(Math.floor(new Date(deadlineStr).getTime() / 1000));
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    if (deadline <= now) {
+      toast.error("Deadline must be in future");
+      return;
+    }
+    const taskTitles = tasks.map((t) => t.title);
+    const taskDescriptions = tasks.map((t) => t.description);
+    const validApprovers = approvers
+      .map((a) => parseAddress(a || ""))
+      .filter((a): a is string => Boolean(a));
+    if (validApprovers.length === 0) {
+      toast.error("Add at least one approver");
+      return;
+    }
+    if (new Set(validApprovers.map((a) => a.toLowerCase())).size !== validApprovers.length) {
+      toast.error("Duplicate approvers");
+      return;
+    }
+
+    const payee = parseAddress(payeeInput);
+    if (!payee || payee === ZERO_ADDRESS) {
+      toast.error("Invalid payee address");
+      return;
+    }
+    if (taskTitles.length !== taskDescriptions.length) {
+      toast.error("Tasks mismatch");
+      return;
+    }
+
+    const contract = getDealblockContract();
+    const tx = prepareContractCall({
+      contract,
+      method: "initialize_Project",
+      params: [
+        payee,
+        token,
+        deadline,
+        title,
+        description,
+        taskTitles,
+        taskDescriptions,
+        amount,
+        validApprovers,
+      ],
+    });
+    try {
+      await sendTx(tx);
+      toast.success("Project created on-chain");
+      navigate("/");
+    } catch (err: any) {
+      toast.error(err?.shortMessage || err?.message || "Transaction failed");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
       {/* Header */}
@@ -67,20 +162,21 @@ const CreateProject = () => {
           </p>
         </div>
 
-        <form className="space-y-6">
+        <form className="space-y-6" onSubmit={onSubmit}>
           {/* Project Details */}
           <Card className="p-6 border-none shadow-card backdrop-blur-sm bg-gradient-card">
             <h2 className="text-xl font-semibold mb-4 text-foreground">Project Details</h2>
             <div className="space-y-4">
               <div>
                 <Label htmlFor="title">Project Title *</Label>
-                <Input id="title" placeholder="Enter project title" className="mt-1.5" />
+                <Input id="title" name="title" placeholder="Enter project title" className="mt-1.5" />
               </div>
 
               <div>
                 <Label htmlFor="description">Project Description *</Label>
                 <Textarea
                   id="description"
+                  name="description"
                   placeholder="Describe the project objectives and deliverables"
                   rows={4}
                   className="mt-1.5"
@@ -92,6 +188,7 @@ const CreateProject = () => {
                   <Label htmlFor="payee">Payee Address *</Label>
                   <Input
                     id="payee"
+                    name="payee"
                     placeholder="0x..."
                     className="mt-1.5 font-mono text-sm"
                   />
@@ -99,7 +196,7 @@ const CreateProject = () => {
 
                 <div>
                   <Label htmlFor="token">Payment Token *</Label>
-                  <Select>
+                  <Select name="token">
                     <SelectTrigger className="mt-1.5">
                       <SelectValue placeholder="Select token" />
                     </SelectTrigger>
@@ -122,6 +219,7 @@ const CreateProject = () => {
                   <Label htmlFor="amount">Milestone Amount *</Label>
                   <Input
                     id="amount"
+                    name="amount"
                     type="number"
                     placeholder="5000"
                     className="mt-1.5"
@@ -132,6 +230,7 @@ const CreateProject = () => {
                   <Label htmlFor="deadline">Deadline *</Label>
                   <Input
                     id="deadline"
+                    name="deadline"
                     type="date"
                     className="mt-1.5"
                   />
@@ -219,8 +318,8 @@ const CreateProject = () => {
 
           {/* Submit */}
           <div className="flex gap-4">
-            <Button type="submit" size="lg" className="flex-1">
-              Initialize Project
+            <Button type="submit" size="lg" className="flex-1" disabled={isPending || !account}>
+              {isPending ? "Initializing..." : "Initialize Project"}
             </Button>
             <Button type="button" variant="outline" size="lg" onClick={() => navigate("/")}>
               Cancel

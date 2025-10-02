@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { parseUnits } from "viem";
+import { TOKEN_ADDRESSES } from "@/lib/thirdweb";
+import { formatTokenAmount } from "@/lib/utils";
 import { Wallet } from "lucide-react";
 
 interface FundMilestoneDialogProps {
@@ -16,9 +19,12 @@ interface FundMilestoneDialogProps {
 
 export const FundMilestoneDialog = ({ open, onOpenChange, milestone, token, onFund }: FundMilestoneDialogProps) => {
   const { toast } = useToast();
-  const [amount, setAmount] = useState(milestone?.amount?.toString() || "");
+  const tokenDecimals = 18;
+  const [amount, setAmount] = useState(milestone?.amount ? formatTokenAmount(milestone.amount, tokenDecimals, 6) : "");
+  const [txState, setTxState] = useState<"idle" | "pending" | "confirming" | "success" | "error">("idle");
+  const [txMessage, setTxMessage] = useState<string>("");
 
-  const handleFund = () => {
+  const handleFund = async () => {
     if (!amount || parseFloat(amount) <= 0) {
       toast({
         title: "Invalid Amount",
@@ -27,13 +33,26 @@ export const FundMilestoneDialog = ({ open, onOpenChange, milestone, token, onFu
       });
       return;
     }
-
-    onFund();
-    toast({
-      title: "Milestone Funded",
-      description: `Successfully funded ${amount} ${token}`,
-    });
-    onOpenChange(false);
+    try {
+      setTxState("pending");
+      setTxMessage("Sign transactions in your wallet (approval may be requested if needed)...");
+      await Promise.resolve(onFund?.());
+      setTxState("confirming");
+      setTxMessage("Waiting for confirmations on-chain...");
+      // Note: onFund includes both approval (if required) and funding, and awaits confirmations
+      setTxState("success");
+      toast({
+        title: "Milestone Funded",
+        description: `Successfully funded ${amount} ${token}`,
+      });
+      onOpenChange(false);
+    } catch (e: any) {
+      setTxState("error");
+      toast({ title: "Funding failed", description: e?.shortMessage || e?.message || "Transaction failed", variant: "destructive" });
+    } finally {
+      setTxMessage("");
+      setTxState("idle");
+    }
   };
 
   return (
@@ -61,7 +80,7 @@ export const FundMilestoneDialog = ({ open, onOpenChange, milestone, token, onFu
               className="text-lg"
             />
             <p className="text-xs text-muted-foreground">
-              Required amount: {milestone?.amount} {token}
+              Required amount: {formatTokenAmount(milestone?.amount ?? 0, tokenDecimals, 6)} {token}
             </p>
           </div>
 
@@ -74,15 +93,24 @@ export const FundMilestoneDialog = ({ open, onOpenChange, milestone, token, onFu
               <span className="text-muted-foreground">Network Fee:</span>
               <span className="font-mono">~0.5 {token}</span>
             </div>
+            {txState !== "idle" && (
+              <div className="text-xs text-muted-foreground pt-1">
+                {txState === "pending" && (txMessage || "Awaiting your signature...")}
+                {txState === "confirming" && (txMessage || "Waiting for on-chain confirmations...")}
+                {txState === "success" && "Success!"}
+                {txState === "error" && "Something went wrong."}
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground/80">Note: If allowance is insufficient, you'll be prompted to approve token spending, then funding will proceed.</p>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={txState === "pending" || txState === "confirming"}>
             Cancel
           </Button>
-          <Button onClick={handleFund}>
-            Fund Milestone
+          <Button onClick={handleFund} disabled={txState === "pending" || txState === "confirming"}>
+            {txState === "pending" ? "Confirm in Wallet" : txState === "confirming" ? "Confirming..." : "Fund Milestone"}
           </Button>
         </DialogFooter>
       </DialogContent>

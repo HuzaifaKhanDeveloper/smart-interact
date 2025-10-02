@@ -2,8 +2,10 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { ArrowRight, CheckCircle2, Clock } from "lucide-react";
+import { formatTokenAmount } from "@/lib/utils";
+import { ArrowRight, CheckCircle2, Clock, Briefcase, Users, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { StatusBadge } from "@/components/StatusBadge";
 
 interface ProjectCardProps {
   project: {
@@ -16,7 +18,11 @@ interface ProjectCardProps {
     completed: boolean;
     milestoneCount: number;
     activeMilestones: number;
-    totalAmount: number;
+    totalAmount: bigint;
+    isInitializer?: boolean;
+    isPayee?: boolean;
+    isApprover?: boolean;
+    pendingApprovals?: number;
   };
 }
 
@@ -24,30 +30,49 @@ export const ProjectCard = ({ project }: ProjectCardProps) => {
   const progress = ((project.milestoneCount - project.activeMilestones) / project.milestoneCount) * 100;
   const navigate = useNavigate();
 
+  // Determine user's role in this project
+  const userRoles = [];
+  if (project.isInitializer) userRoles.push("Creator");
+  if (project.isPayee) userRoles.push("Worker");
+  if (project.isApprover) userRoles.push("Approver");
+
   return (
     <Card className="group p-6 border-none shadow-card backdrop-blur-sm bg-gradient-card hover:shadow-elevated transition-all duration-300 cursor-pointer">
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
-          <h3 className="text-xl font-semibold text-foreground mb-2 group-hover:text-primary transition-colors">
-            {project.title}
-          </h3>
+          <div className="flex items-center gap-2 mb-2">
+            <h3 className="text-xl font-semibold text-foreground group-hover:text-primary transition-colors">
+              {project.title}
+            </h3>
+            {/* Role indicators */}
+            <div className="flex items-center gap-1">
+              {project.isInitializer && (
+                <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
+                  <Briefcase className="h-3 w-3 mr-1" />
+                  Creator
+                </Badge>
+              )}
+              {project.isPayee && (
+                <Badge variant="outline" className="text-xs bg-secondary/10 text-secondary border-secondary/20">
+                  <Users className="h-3 w-3 mr-1" />
+                  Worker
+                </Badge>
+              )}
+              {project.isApprover && (project.pendingApprovals || 0) > 0 && (
+                <Badge variant="destructive" className="text-xs">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  {project.pendingApprovals} pending
+                </Badge>
+              )}
+            </div>
+          </div>
           <p className="text-sm text-muted-foreground line-clamp-2">
             {project.description}
           </p>
         </div>
-        <Badge variant={project.completed ? "default" : "secondary"} className="ml-2">
-          {project.completed ? (
-            <span className="flex items-center gap-1">
-              <CheckCircle2 className="h-3 w-3" />
-              Completed
-            </span>
-          ) : (
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              Active
-            </span>
-          )}
-        </Badge>
+        <div className="ml-2">
+          <StatusBadge status={project.completed ? "COMPLETED" : "INITIALIZED"} />
+        </div>
       </div>
 
       <div className="space-y-4 mb-6">
@@ -69,7 +94,7 @@ export const ProjectCard = ({ project }: ProjectCardProps) => {
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Total Value</p>
             <p className="text-sm font-semibold text-foreground">
-              ${project.totalAmount.toLocaleString()}
+              {formatTokenAmount(project.totalAmount, 18, 4)} {project.token}
             </p>
           </div>
         </div>

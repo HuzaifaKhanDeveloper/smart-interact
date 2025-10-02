@@ -2,12 +2,14 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Clock, DollarSign, Users, ChevronDown, Calendar, CircleDot, Edit, Wallet, Check, ArrowDownToLine } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { CheckCircle2, Clock, DollarSign, Users, ChevronDown, Calendar, CircleDot, Edit, Wallet, Check, ArrowDownToLine, XCircle, TimerReset, Plus } from "lucide-react";
+import { cn, formatTokenAmount } from "@/lib/utils";
 import { EditMilestoneDialog } from "@/components/dialogs/EditMilestoneDialog";
 import { FundMilestoneDialog } from "@/components/dialogs/FundMilestoneDialog";
 import { ApproveDialog } from "@/components/dialogs/ApproveDialog";
 import { WithdrawDialog } from "@/components/dialogs/WithdrawDialog";
+import { TOKEN_ADDRESSES } from "@/lib/thirdweb";
+import { StatusBadge } from "@/components/StatusBadge";
 
 interface Task {
   title: string;
@@ -24,10 +26,24 @@ interface MilestoneCardProps {
     approvers: string[];
     tasks: Task[];
     editLocked: boolean;
+    initializerApprovalRequired?: boolean;
+    initializerHasApproved?: boolean;
   };
   projectToken: string;
   onUpdate: (milestone: any) => void;
   isAdmin: boolean;
+  isInitializer?: boolean;
+  isPayee?: boolean;
+  isProjectCompleted?: boolean;
+  onFund?: () => Promise<void> | void;
+  onApprove?: () => Promise<void> | void;
+  onWithdraw?: () => Promise<void> | void;
+  onMarkReview?: () => Promise<void> | void;
+  onComplete?: () => Promise<void> | void;
+  onRelease?: () => Promise<void> | void;
+  onCancel?: () => Promise<void> | void;
+  onExtendDeadline?: () => Promise<void> | void;
+  onAddTasks?: () => Promise<void> | void;
 }
 
 const statusConfig = {
@@ -63,12 +79,14 @@ const statusConfig = {
   },
 };
 
-export const MilestoneCard = ({ milestone, projectToken, onUpdate, isAdmin }: MilestoneCardProps) => {
+export const MilestoneCard = ({ milestone, projectToken, onUpdate, isAdmin, isInitializer, isPayee, isProjectCompleted, onFund, onApprove, onWithdraw, onMarkReview, onComplete, onRelease, onCancel, onExtendDeadline, onAddTasks }: MilestoneCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [fundOpen, setFundOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+
+  const tokenDecimals = 18;
 
   const config = statusConfig[milestone.status as keyof typeof statusConfig];
   const StatusIcon = config.icon;
@@ -76,22 +94,60 @@ export const MilestoneCard = ({ milestone, projectToken, onUpdate, isAdmin }: Mi
   const daysRemaining = Math.ceil((milestone.endingAt - Date.now()) / (1000 * 60 * 60 * 24));
   const isOverdue = daysRemaining < 0;
 
-  const handleFund = () => {
-    onUpdate({ ...milestone, status: "FUNDED" });
+  const handleFund = async () => {
+    if (onFund) await onFund();
+    else onUpdate({ ...milestone, status: "FUNDED" });
   };
 
-  const handleApprove = () => {
-    onUpdate({ ...milestone, status: "APPROVED" });
+  const handleApprove = async () => {
+    if (onApprove) await onApprove();
+    else onUpdate({ ...milestone, status: "APPROVED" });
   };
 
-  const handleWithdraw = () => {
-    onUpdate({ ...milestone, status: "COMPLETED" });
+  const handleWithdraw = async () => {
+    if (onWithdraw) await onWithdraw();
+    else onUpdate({ ...milestone, status: "COMPLETED" });
   };
 
-  const canEdit = !milestone.editLocked && isAdmin;
-  const canFund = milestone.status === "INITIALIZED" && isAdmin;
-  const canApprove = milestone.status === "REVIEW" && isAdmin;
-  const canWithdraw = milestone.status === "APPROVED";
+  const handleMarkReview = async () => {
+    if (onMarkReview) await onMarkReview();
+    else onUpdate({ ...milestone, status: "REVIEW" });
+  };
+
+  const handleComplete = async () => {
+    if (onComplete) await onComplete();
+    else onUpdate({ ...milestone, status: "APPROVED" });
+  };
+
+  const handleRelease = async () => {
+    if (onRelease) await onRelease();
+    else onUpdate({ ...milestone, status: "COMPLETED" });
+  };
+
+  const handleCancel = async () => {
+    if (onCancel) await onCancel();
+    else onUpdate({ ...milestone, status: "CANCELLED" });
+  };
+
+  const handleExtend = async () => {
+    if (onExtendDeadline) await onExtendDeadline();
+  };
+
+  const handleAddTasks = async () => {
+    if (onAddTasks) await onAddTasks();
+  };
+
+  const isLockedByProject = Boolean(isProjectCompleted);
+  const canEdit = !milestone.editLocked && isAdmin && !isLockedByProject;
+  const canFund = milestone.status === "INITIALIZED" && Boolean(isInitializer) && !isLockedByProject;
+  const canMark = milestone.status === "FUNDED" && Boolean(isPayee) && !isLockedByProject;
+  const canApprove = milestone.status === "REVIEW" && (Boolean(isInitializer) || Boolean(isAdmin)) && !isLockedByProject;
+  const canComplete = milestone.status === "REVIEW" && (Boolean(isInitializer) || Boolean(isAdmin)) && !isLockedByProject;
+  const canWithdraw = milestone.status === "APPROVED" && (Boolean(isInitializer) || isAdmin) && !isLockedByProject;
+  const canRelease = milestone.status === "APPROVED" && (Boolean(isInitializer) || isAdmin) && !isLockedByProject;
+  const canCancel = milestone.status === "INITIALIZED" && Boolean(isInitializer) && !isLockedByProject;
+  const canExtend = (milestone.status === "INITIALIZED" || milestone.status === "FUNDED") && Boolean(isInitializer) && !isLockedByProject;
+  const canAddTasks = (milestone.status === "INITIALIZED" || milestone.status === "FUNDED") && Boolean(isInitializer) && !isLockedByProject;
 
   return (
     <>
@@ -106,12 +162,10 @@ export const MilestoneCard = ({ milestone, projectToken, onUpdate, isAdmin }: Mi
                 <StatusIcon className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-foreground">
-                  Milestone {milestone.index + 1}
-                </h3>
-                <Badge variant="outline" className={cn("mt-1", config.color)}>
-                  {config.label}
-                </Badge>
+                <h3 className="text-lg font-semibold text-foreground">Milestone {milestone.index + 1}</h3>
+                <div className="mt-1">
+                  <StatusBadge status={milestone.status} />
+                </div>
               </div>
             </div>
 
@@ -130,7 +184,7 @@ export const MilestoneCard = ({ milestone, projectToken, onUpdate, isAdmin }: Mi
                 Amount
               </p>
               <p className="font-semibold text-foreground">
-                ${milestone.amount.toLocaleString()} {projectToken}
+                {formatTokenAmount(milestone.amount, tokenDecimals, 4)} {projectToken}
               </p>
             </div>
 
@@ -172,16 +226,52 @@ export const MilestoneCard = ({ milestone, projectToken, onUpdate, isAdmin }: Mi
                 Fund Milestone
               </Button>
             )}
+            {canMark && (
+              <Button variant="default" size="sm" onClick={handleMarkReview}>
+                <Check className="h-3 w-3 mr-1" />
+                Mark for Review
+              </Button>
+            )}
             {canApprove && (
               <Button variant="default" size="sm" onClick={() => setApproveOpen(true)}>
                 <Check className="h-3 w-3 mr-1" />
                 Approve
               </Button>
             )}
+            {canComplete && (
+              <Button variant="outline" size="sm" onClick={handleComplete}>
+                <Check className="h-3 w-3 mr-1" />
+                Complete
+              </Button>
+            )}
             {canWithdraw && (
               <Button variant="default" size="sm" onClick={() => setWithdrawOpen(true)}>
                 <ArrowDownToLine className="h-3 w-3 mr-1" />
                 Withdraw
+              </Button>
+            )}
+            {canRelease && (
+              <Button variant="default" size="sm" onClick={handleRelease}>
+                <ArrowDownToLine className="h-3 w-3 mr-1" />
+                Release Payment
+              </Button>
+            )}
+            {canCancel && (
+              <Button variant="destructive" size="sm" onClick={handleCancel}>
+                <XCircle className="h-3 w-3 mr-1" />
+                Cancel
+              </Button>
+            )}
+            {canExtend && (
+              <Button variant="outline" size="sm" onClick={handleExtend}>
+                <TimerReset className="h-3 w-3 mr-1" />
+                Extend Deadline
+              </Button>
+            )}
+            {canAddTasks && (
+              <Button variant="outline" size="sm" onClick={handleAddTasks}>
+                <Plus className="h-3 w-3 mr-1" />
+                Add Tasks
               </Button>
             )}
           </div>
@@ -203,16 +293,28 @@ export const MilestoneCard = ({ milestone, projectToken, onUpdate, isAdmin }: Mi
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold mb-3 text-foreground">Approvers</h4>
+              <h4 className="text-sm font-semibold mb-3 text-foreground">Approvals</h4>
               <div className="space-y-2">
+                {milestone.approvers.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No approvers</p>
+                )}
+                {/* Placeholder approval UI: mark all approvers as pending (extend when on-chain approvals list is available) */}
                 {milestone.approvers.map((approver, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-background/50">
                     <p className="font-mono text-xs text-foreground">{approver}</p>
-                    <Badge variant="outline" className="bg-muted/50">
-                      Pending
-                    </Badge>
+                    <Badge variant="outline" className="bg-muted/50">Pending</Badge>
                   </div>
                 ))}
+                {Boolean(milestone.initializerApprovalRequired) && (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-background/50">
+                    <p className="font-mono text-xs text-foreground">Initializer</p>
+                    <Badge variant="outline" className={cn("", milestone.initializerHasApproved ? "bg-success/10 text-success" : "bg-muted/50")}>{milestone.initializerHasApproved ? "Approved" : "Pending"}</Badge>
+                  </div>
+                )}
+                {/* Basic approval progress until per-approver data is available */}
+                <p className="text-xs text-muted-foreground pt-1">
+                  Approvals: {milestone.initializerHasApproved ? 1 : 0} / {milestone.approvers.length + (milestone.initializerApprovalRequired ? 1 : 0)}
+                </p>
               </div>
             </div>
           </div>

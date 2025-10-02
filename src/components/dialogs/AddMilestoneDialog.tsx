@@ -10,7 +10,12 @@ import { useToast } from "@/hooks/use-toast";
 interface AddMilestoneDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAdd: (milestone: any) => void;
+  onAdd: (milestone: {
+    amount: string;
+    endingAt: number;
+    tasks: Array<{ title: string; description: string }>;
+    approvers: string[];
+  }) => void;
 }
 
 export const AddMilestoneDialog = ({ open, onOpenChange, onAdd }: AddMilestoneDialogProps) => {
@@ -62,13 +67,10 @@ export const AddMilestoneDialog = ({ open, onOpenChange, onAdd }: AddMilestoneDi
     }
 
     const milestone = {
-      amount: parseFloat(amount),
-      startingAt: new Date(startDate).getTime(),
+      amount: amount,
       endingAt: new Date(endDate).getTime(),
       tasks: tasks.filter(t => t.title),
       approvers: approvers.filter(a => a),
-      status: "INITIALIZED",
-      editLocked: false
     };
 
     onAdd(milestone);

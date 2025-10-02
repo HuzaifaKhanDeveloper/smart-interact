@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "./data/DB_Variables.sol";
+import "./DB_Variables.sol";
 
 contract DealBlock is DB_Variables {
 
